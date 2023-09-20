@@ -1,0 +1,200 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+---
+
+
+```{r}
+
+#install.packages("wordcloud")
+#install.packages("tm")
+library(shiny)
+library(wordcloud)
+library(tm)
+library(ggplot2)
+library(ggrepel)
+
+# Data Import
+age_happy_cause <- read.csv("/Users/maheze/Desktop/age_happy_cause.csv")
+analysis_data2 <- read.csv("/Users/maheze/Desktop/analysis_data2.csv")
+
+# UI
+ui <- navbarPage("Happiness Topics Analysis by Age Category",
+                 tabPanel("Overview",
+                          fluidPage(
+                              titlePanel("Overview"),
+                              htmlOutput("goal"),
+                              HTML("<br>"),  
+                              htmlOutput("data")
+                              
+                          )
+                 ),
+                 tabPanel("Methodology",
+                          fluidPage(
+                              titlePanel("Methodology"),
+                              htmlOutput("methodsDescription"),
+                              htmlOutput("exampleBox")
+                          )
+                 ),
+                 tabPanel("Age Topic Distribution",
+                          fluidPage(
+                              titlePanel("Top 5 Topics by Age"),
+                              sidebarLayout(
+                                  sidebarPanel(
+                                      selectInput("ageForPie", "Choose an Age Category:", choices = unique(age_happy_cause$age_category))
+                                  ),
+                                  mainPanel(
+                                      plotOutput("pieChart")
+                                  )
+                              )
+                          )
+                 ),
+                 tabPanel("Topic WordCloud",
+                          fluidPage(
+                              titlePanel("WordCloud by Topic and Age"),
+                              sidebarLayout(
+                                  sidebarPanel(
+                                      selectInput("topic", "Choose a Topic or Topics:", choices = unique(analysis_data2$predicted_happy_cause), multiple = TRUE),
+                                      selectInput("ageForCloud", "Choose an Age Category:", choices = unique(analysis_data2$age_category))
+                                  ),
+                                  mainPanel(
+                                      plotOutput("wordCloud")
+                                  )
+                              )
+                          )
+                 ),
+                 tabPanel("Results & Findings",
+                          fluidPage(
+                              titlePanel("Results and Findings"),
+                              htmlOutput("resultsDescription")
+                          )
+                 )
+)
+
+# Server
+
+server <- function(input, output, session) {
+  
+output$goal <- renderUI({
+    HTML(paste(
+      "<span style='font-size:20px;'><b>Goal:</b></span><br>",
+      " find out the cause of happy moment by age <br>",
+      collapse = "\n"  # This will ensure each item appears on a new line
+    ))
+  })
+
+output$data <- renderUI({
+    HTML(paste(
+      "<span style='font-size:20px;'><b>Data:</b></span><br>",
+      "Number of total happy moments: 100,535 <br>",
+      "Number of workers: 10,841 <br>",
+      strong("Age Classification:"), "<br>",
+      "<i>0-18:</i> Child<br>",
+      "<i>19-29:</i> Young Adult<br>",
+      "<i>30-44:</i> Mid Adult<br>",
+      "<i>45-64:</i> Late Adult<br>",
+      "<i>65 and above:</i> Elder<br><br>",  # Added an extra line break here
+      collapse = "\n"  # This will ensure each item appears on a new line
+    ))
+})
+
+
+  
+output$methodsDescription <- renderUI({
+    HTML(paste0(
+      "<span style='font-size:20px;'><b>Why we use ", strong("topic modeling"), "?</b></span><br>",
+      "We've already gotten some topics including affection, ",
+      "enjoy_the_moment, bonding, etc. ",
+      "However, most of the categories are too broad to align with our use case.<br>",
+      "Our solution is to provide more detailed insight to figure out the source of happiness by using ", strong("Guided BERTopic"), " (beat LDA in topic coherence evaluation) for topic modeling.<br>",
+      strong("Orginal topics(7):"), " affection, achievement, enjoy_the_moment, bonding, leisure, nature, exercise<br>",
+      strong("Our topics(17):"), " achievement, leisure, nature, exercise, family, food, pet, party, vacation, entertainment, shopping, health, work, routine, art, philosophy, politics.<br><br>"  # Added an extra line break here
+    ))
+  })
+
+output$exampleBox <- renderUI({
+    HTML(paste0(
+      "<span style='font-size:20px;'><b>Example:</b></span><br>",
+      "Sentence: 'My son woke me up to a fantastic breakfast of eggs, his special hamburger patty and pancakes.'<br>",
+      "Old Label: affection<br>",
+      "New Label: affection, food <br><br>"  # Added an extra line break here
+    ))
+  })
+
+
+  output$resultsDescription <- renderUI({
+    conclusion <- c(
+      "<strong>Diverse Definitions:</strong> Same happiness source, varied definitions and causes.",
+      "<strong>Achievement, Family, & Food:</strong> Top sources of joy across all ages.",
+      "<strong>Elderly & Pets:</strong> Pets increasingly bring happiness to older individuals.",
+      "<strong>Younger Age & Entertainment:</strong> Entertainment frequently sparks joy in the young.",
+      "<strong>Achievement & Work:</strong> For most age groups, excluding the elderly and children, work stands as the pivotal source of joy from achievement.",
+      "<strong>Younger Generations & Online Shopping:</strong> Younger groups link happiness to online shopping aspects, e.g., 'packages'."
+    )
+    HTML(paste(conclusion, collapse = "<br>"))
+  })
+
+
+  
+output$pieChart <- renderPlot({
+    age_data_pie <- subset(age_happy_cause, age_category == input$ageForPie)
+    total_count <- sum(age_data_pie$hmid_count)
+    age_data_pie$percentage <- (age_data_pie$hmid_count / total_count) * 100
+
+    # Sort age_data_pie by hmid_count in descending order
+    age_data_pie <- age_data_pie[order(-age_data_pie$hmid_count), ]
+
+    # Create a fixed color mapping for each unique predicted_happy_cause
+    unique_topics <- sort(unique(age_happy_cause$predicted_happy_cause))
+    colors <- brewer.pal(length(unique_topics), "Set3")
+    color_mapping <- setNames(colors, unique_topics)
+
+    ggplot(age_data_pie, aes(x = "", y = hmid_count, fill = predicted_happy_cause)) +
+      geom_bar(stat = "identity", width = 1) +
+      coord_polar(theta = "y") +
+      scale_fill_manual(values = color_mapping) +  # Use the fixed color mapping
+      theme_minimal() +
+      theme(
+        axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        panel.grid = element_blank(),
+        plot.title = element_text(hjust = 0.5)
+      )
+})
+
+
+output$wordCloud <- renderPlot({
+    selected_data <- subset(analysis_data2, age_category == input$ageForCloud & predicted_happy_cause %in% input$topic)   # Updated to handle multiple topics
+    
+    if(nrow(selected_data) > 0) {
+      all_texts <- tolower(paste(selected_data$cleaned_text, collapse = " "))
+      doc <- Corpus(VectorSource(all_texts))
+      doc <- tm_map(doc, content_transformer(tolower))
+      doc <- tm_map(doc, removePunctuation)
+      doc <- tm_map(doc, removeNumbers)
+      doc <- tm_map(doc, removeWords, stopwords("en"))
+      dtm <- TermDocumentMatrix(doc)
+      matrix <- as.matrix(dtm)
+      words_freqs <- sort(rowSums(matrix), decreasing=TRUE)
+      df <- data.frame(word = names(words_freqs), freq = words_freqs)
+      
+      # Increase the scale to enlarge the word cloud.
+      wordcloud(words = df$word, freq = df$freq, min.freq = 1, max.words = 200, random.order = FALSE, scale=c(5,0.5), colors = brewer.pal(8, "Dark2"))
+    } else {
+      return(NULL)
+    }
+  }, height = 500, width = 700)
+
+}
+
+shinyApp(ui, server)
+
+
+
+```
+
+
+
