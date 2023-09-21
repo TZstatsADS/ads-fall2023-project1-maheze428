@@ -14,9 +14,6 @@ Term: Fall 2023
 
 + Project summary: [a short summary] This project is to capture the cause of happiness moment based on plain text data.  
 
-
-Following [suggestions](http://nicercode.github.io/blog/2013-04-05-projects/) by [RICH FITZJOHN](http://nicercode.github.io/about/#Team) (@richfitz). This folder is orgarnized as follows.
-
 ```
 proj/
 ├── lib/
